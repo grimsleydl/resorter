@@ -1,0 +1,45 @@
+#!/usr/bin/env zsh
+set -euo pipefail
+
+# INFILE=mal-completed.csv
+INFILE=test.csv
+OUTFILE=test-$(date -u +"%Y%m%dT%H%M").csv
+
+ask() {
+    local prompt default reply
+    if [[ ${2:-} = 'Y' ]]; then
+        prompt='Y/n'
+        default='Y'
+    elif [[ ${2:-} = 'N' ]]; then
+        prompt='y/N'
+        default='N'
+    else
+        prompt='y/n'
+        default=''
+    fi
+    while true; do
+        # Ask the question (not using "read -p" as it uses stderr not stdout)
+        echo -n "$1 [$prompt] "
+        # Read the answer (use /dev/tty in case stdin is redirected from somewhere else)
+        read -r reply </dev/tty
+        # Default?
+        if [[ -z $reply ]]; then
+            reply=$default
+        fi
+        # Check if the reply is valid
+        case "$reply" in
+            Y* | y*) return 0 ;;
+            N* | n*) return 1 ;;
+        esac
+    done
+}
+
+Rscript resorter.R -i =(awk -F ',' -v FPAT="([^,]+)|(\"[^\"]+\")" -v OFS=', ' '{gsub(/"/,"",$2); print $1,$2,$3}' "$INFILE") --quantiles '0 0.05 0.1 0.2 0.3 0.4 0.5 0.97 0.98 0.99 0.995' -o "$OUTFILE" --progress
+
+# Rscript resorter.R -i "$INFILE" --quantiles '0 0.05 0.1 0.2 0.3 0.4 0.5 0.97 0.98 0.99 0.995' -o "$OUTFILE" --progress
+
+# Rscript resorter.R -i =(awk -F ',' -v FPAT="([^,]+)|(\"[^\"]+\")" -v OFS=', ' '{gsub(/"/,"",$2); print $1,$2}' test-20210926T0511.csv) --quantiles '0 0.05 0.1 0.2 0.3 0.4 0.5 0.97 0.98 0.99 0.995' -o "$OUTFILE" --progress
+
+echo
+# ask "Keep result?" || rm "$OUTFILE"
+rm "$OUTFILE"
