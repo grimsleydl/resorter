@@ -1,13 +1,19 @@
-{ nixpkgs, ... }:
-let
-
 with import <nixpkgs> { }; {
   resorter = stdenv.mkDerivation {
     name = "resorter";
     version = "1";
     src = if lib.inNixShell then null else nix;
 
-    buildInputs = with rPackages; [ R BradleyTerry2 argparser ];
+    buildInputs = with rPackages; [
+      R
+      httr
+      BradleyTerry2
+      argparser
+      tidyverse
+      jsonlite
+      jqr
+      dplyr
+    ];
   };
   # rEnv = pkgs.rWrapper.override {
   #   packages = with pkgs.rPackages; [
