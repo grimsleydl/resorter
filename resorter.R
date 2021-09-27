@@ -1,3 +1,8 @@
+loaded <- suppressPackageStartupMessages(library(tidyverse, quietly=TRUE, logical.return=TRUE))
+loaded <- suppressPackageStartupMessages(library(jsonlite, quietly=TRUE, logical.return=TRUE))
+loaded <- suppressPackageStartupMessages(library(httr, quietly=TRUE, logical.return=TRUE))
+loaded <- suppressPackageStartupMessages(library(jqr, quietly=TRUE, logical.return=TRUE))
+loaded <- suppressPackageStartupMessages(library(dplyr, quietly=TRUE, logical.return=TRUE))
 # attempt to load a library implementing the Bradley-Terry model for inferring rankings based on
 # comparisons; if it doesn't load, try to install it through R's in-language package management;
 # otherwise, abort and warn the user
@@ -28,6 +33,16 @@ p <- add_argument(p, "--no-scale", flag=TRUE, "Do not discretize/bucket the fina
 p <- add_argument(p, "--progress", flag=TRUE, "Print out mean standard error of items")
 argv <- parse_args(p)
 
+jikan_api <- function(path) {
+  url <- modify_url("https://api.jikan.moe", path = paste("v3", path, sep="/"))
+
+  resp <- GET(url)
+  if (http_type(resp) != "application/json") {
+    stop("API did not return json", call. = FALSE)
+  }
+  jq(content(resp, "text", encoding = "UTF-8"), ".title_english")
+}
+
 # read in the data from either the specified file or stdin:
 if(!is.na(argv$input)) { ranking <- read.csv(file=argv$input, stringsAsFactors=TRUE, header=FALSE); } else {
     ranking <- read.csv(file=file('stdin'), stringsAsFactors=TRUE, header=FALSE); }
@@ -38,7 +53,7 @@ if (is.na(argv$queries)) { n <- nrow(ranking)
 
 # if user did not specify a second column of initial ratings, then put in a default of '1':
 if(ncol(ranking)==1) { ranking$Rating <- 1; }
-colnames(ranking) <- c("Media", "Rating")
+colnames(ranking) <- c("Media", "Rating", "ID")
 # A set of ratings like 'foo,1\nbar,2' is not comparisons, though. We *could* throw out everything except the 'Media' column
 # but we would like to accelerate the interactive querying process by exploiting the valuable data the user has given us.
 # So we 'seed' the comparison dataset based on input data: higher rating means +1, lower means −1, same rating == tie (0.5 to both)
@@ -74,7 +89,7 @@ if(argv$verbose) {
 }
 
 set.seed(2015-09-10)
-cat("Comparison commands: 1=yes, 2=tied, 3=second is better, p=print estimates, s=skip, q=quit\n")
+cat("Comparison commands: 1=yes, 2=second is better, 3=tied, p=print estimates, s=skip, q=quit\n")
 for (i in 1:argv$queries) {
 
  # with the current data, calculate and extract the new estimates:
@@ -88,7 +103,7 @@ for (i in 1:argv$queries) {
  # select two media to compare: pick the media with the highest standard error and the media above or below it with the highest standard error:
  # which is a heuristic for the most informative pairwise comparison. BT2 appears to get caught in some sort of a fixed point with greedy selection,
  # so every few rounds pick a random starting point:
- media1N <- if (i %% 3 == 0) { which.max(coefficients[,2]) } else { sample.int(nrow(coefficients), 1) }
+ media1N <- if (i %% 5 == 0) { which.max(coefficients[,2]) } else { sample.int(nrow(coefficients), 1) }
  media2N <- if (media1N == nrow(coefficients)) { nrow(coefficients)-1; } else { # if at the top & 1st place, must compare to 2nd place
    if (media1N == 1) { 2; } else { # if at the bottom/last place, must compare to 2nd-to-last
     # if neither at bottom nor top, then there are two choices, above & below, and we want the one with highest SE; if equal, arbitrarily choose the better:
@@ -98,14 +113,35 @@ for (i in 1:argv$queries) {
  media1 <- targets[media1N]
  media2 <- targets[media2N]
 
+ media1_en <- fromJSON(jikan_api(paste("anime", ranking$ID[match(media1, ranking[ranking$Media, "Media"])], sep="/")))
+ media2_en <- fromJSON(jikan_api(paste("anime", ranking$ID[match(media2, ranking[ranking$Media, "Media"])], sep="/")))
+ media1_en <- if (is.null(media1_en)) { media1 } else { noquote(media1_en) }
+ media2_en <- if (is.null(media2_en)) { media2 } else { noquote(media2_en) }
+
  if (argv$`progress`) { cat(paste0("Mean stderr: ", round(mean(coefficients[,2]))), " | "); }
- cat(paste0("Is '", as.character(media1), "' greater than '", as.character(media2), "'? "))
+ if (tolower(noquote(as.character(media1))) == tolower(media1_en) && (tolower(noquote(as.character(media2))) == tolower(media2_en)))
+ {
+   cat(paste0("Is '", as.character(media1), "' greater than '", as.character(media2), "'? "))
+ }
+ if (tolower(noquote(as.character(media1))) == tolower(media1_en) && (tolower(noquote(as.character(media2))) != tolower(media2_en)))
+ {
+   cat(paste0("Is '", as.character(media1), "' greater than '", as.character(media2), " (", as.character(media2_en), ")", "'? "))
+ }
+ if (tolower(noquote(as.character(media1))) != tolower(media1_en) && (tolower(noquote(as.character(media2))) == tolower(media2_en)))
+ {
+   cat(paste0("Is '", as.character(media1), " (", as.character(media1_en), ")", "' greater than '", as.character(media2), "'? "))
+ }
+ if (tolower(noquote(as.character(media1))) != tolower(media1_en) && (tolower(noquote(as.character(media2))) != tolower(media2_en)))
+ {
+   cat(paste0("Is '", as.character(media1), " (", as.character(media1_en), ")", "' greater than '", as.character(media2), " (", as.character(media2_en), ")", "'? "))
+ }
+
  rating <- scan("stdin", character(), n=1, quiet=TRUE)
 
  switch(rating,
         "1" = { comparisons <- rbind(comparisons, data.frame("Media.1"=media1, "Media.2"=media2, "win1"=1, "win2"=0)) },
-        "3" = { comparisons <- rbind(comparisons, data.frame("Media.1"=media1, "Media.2"=media2, "win1"=0, "win2"=1)) },
-        "2" = { comparisons <- rbind(comparisons, data.frame("Media.1"=media1, "Media.2"=media2, "win1"=0.5, "win2"=0.5))},
+        "2" = { comparisons <- rbind(comparisons, data.frame("Media.1"=media1, "Media.2"=media2, "win1"=0, "win2"=1)) },
+        "3" = { comparisons <- rbind(comparisons, data.frame("Media.1"=media1, "Media.2"=media2, "win1"=0.5, "win2"=0.5))},
         "p" = { estimates <- data.frame(Media=row.names(coefficients), Estimate=coefficients[,1], SE=coefficients[,2]);
                 print(comparisons)
                 print(warnings())
@@ -126,7 +162,13 @@ if(argv$verbose) { print(rownames(coefficients)[which.max(coefficients[2,])]);
                  print(sort(coefficients[,1])) }
 
 ranking2 <- as.data.frame(BTabilities(updatedRankings))
+
+## print(rownames(ranking2))
 ranking2$Media <- rownames(ranking2)
+## ranking2$ID <- with(ranking, ID[match(ranking2$Media, "Media")])
+## print(with(ranking, ID[match(ranking2$Media, "Media")]))
+ranking2$ID <- print(with(ranking, ID[match(ranking2$Media, Media)]))
+## ranking$ID[match(media1, ranking[ranking$Media, "Media"])],
 rownames(ranking2) <- NULL
 
 if(!(argv$`no_scale`)) {
@@ -139,7 +181,7 @@ if(!(argv$`no_scale`)) {
                                     breaks=quantile(ability, probs=quantiles),
                                     labels=1:(length(quantiles)-1),
                                     include.lowest=TRUE))
-    df <- subset(ranking2[order(ranking2$Quantile, decreasing=TRUE),], select=c("Media", "Quantile"));
+    df <- subset(ranking2[order(ranking2$Quantile, decreasing=TRUE),], select=c("Media", "Quantile", "ID"));
     if (!is.na(argv$output)) { write.csv(df, file=argv$output, row.names=FALSE) } else { print(df); }
 } else { # return just the latent continuous scores:
          df <- data.frame(Media=rownames(coefficients), Estimate=coefficients[,1]);
