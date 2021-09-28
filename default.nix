@@ -13,6 +13,7 @@ with import <nixpkgs> { }; {
       jsonlite
       jqr
       dplyr
+      purrr
     ];
   };
   # rEnv = pkgs.rWrapper.override {
