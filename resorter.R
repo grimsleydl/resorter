@@ -1,4 +1,6 @@
+options(width=350)
 loaded <- suppressPackageStartupMessages(library(tidyverse, quietly = TRUE, logical.return = TRUE))
+loaded <- suppressPackageStartupMessages(library(feather, quietly = TRUE, logical.return = TRUE))
 loaded <- suppressPackageStartupMessages(library(postlogic, quietly = TRUE, logical.return = TRUE))
 loaded <- suppressPackageStartupMessages(library(jsonlite, quietly = TRUE, logical.return = TRUE))
 loaded <- suppressPackageStartupMessages(library(httr, quietly = TRUE, logical.return = TRUE))
@@ -37,6 +39,7 @@ p <- add_argument(p, "--input",
   "input file: a CSV file of items to sort: one per line, with up to two columns. (eg both 'Akira\\n' and 'Akira, 10\\n' are valid).", type = "character"
 )
 p <- add_argument(p, "--output", "output file: a file to write the final results to. Default: printing to stdout.")
+p <- add_argument(p, "--save-path", "path to models and output")
 p <- add_argument(p, "--verbose", "whether to print out intermediate statistics", flag = TRUE)
 p <- add_argument(p, "--queries",
   short = "-n", default = NA,
@@ -50,6 +53,12 @@ p <- add_argument(p, "--header", flag = TRUE, "Input has a header; skip first li
 p <- add_argument(p, "--colorize", flag = TRUE, "colorize output")
 argv <- parse_args(p)
 
+print(paste(argv$save_path, "models", sep="/"))
+print(argv$save_path)
+if(!dir.exists(paste(argv$save_path))) dir.create(paste(argv$save_path))
+if(!dir.exists(paste(argv$save_path, "models", sep="/"))) dir.create(paste(argv$save_path, "models", sep="/"))
+
+## setwd(paste(argv$input, "models", sep="/"))
 get_cli_response <- function(n=1) {
   keywords <- scan("stdin", what=character(), nlines=n, quiet=TRUE)
   if (nchar(keywords) != 1 || length(keywords) != 1) {
@@ -70,6 +79,10 @@ jikan_api <- function(path) {
 get_en_title <- function(ID) {
   return(jikan_api(paste("anime", ID, sep="/")))
 }
+error <- red $ underline
+warn <- yellow $ underline
+note <- cyan
+tiesWarning <- warn("Warning: too many ties; precision reduced\n")
 
 # read in the data from either the specified file or stdin:
 if (!is.na(argv$input)) {
@@ -88,7 +101,7 @@ if (is.na(argv$queries)) {
   n <- nrow(ranking)
   argv$queries <- round(n * log(n) + 1)
 }
-
+argv$queries <- 25
 # if user did not specify a second column of initial ratings, then put in a default of '1':
 if (ncol(ranking) == 1) {
   ranking$Rating <- 1
@@ -113,18 +126,21 @@ comparisons <- NULL
 for (i in 1:(nrow(ranking) - 1)) {
   rating1 <- ranking[i, ]$Rating
   media1 <- ranking[i, ]$Media
+  id1 <- ranking[i, ]$ID
   rating2 <- ranking[i + 1, ]$Rating
   media2 <- ranking[i + 1, ]$Media
+  id2 <- ranking[i + 1, ]$ID
   if (rating1 == rating2) {
-    comparisons <- rbind(comparisons, data.frame("Media.1" = media1, "Media.2" = media2, "win1" = 0.5, "win2" = 0.5))
+    comparisons <- rbind(comparisons, data.frame("timestamp"=Sys.time(), "Media.1" = media1, "ID.1"=id1, "Media.2" = media2, "ID.2"=id2, "win1" = 0.5, "win2" = 0.5))
   } else {
     if (rating1 > rating2) {
-      comparisons <- rbind(comparisons, data.frame("Media.1" = media1, "Media.2" = media2, "win1" = 1, "win2" = 0))
+      comparisons <- rbind(comparisons, data.frame("timestamp"=Sys.time(), "Media.1" = media1, "ID.1"=id1, "Media.2" = media2, "ID.2"=id2, "win1" = 1, "win2" = 0))
     } else {
-      comparisons <- rbind(comparisons, data.frame("Media.1" = media1, "Media.2" = media2, "win1" = 0, "win2" = 1))
+      comparisons <- rbind(comparisons, data.frame("timestamp"=Sys.time(), "Media.1" = media1, "ID.1"=id1, "Media.2" = media2, "ID.2"=id2, "win1" = 0, "win2" = 1))
     }
   }
 }
+print(comparisons)
 # the use of '0.5' is recommended by the BT2 paper, despite causing quasi-spurious warnings:
 # > In several of the data examples (e.g., `?CEMS`, `?springall`, `?sound.fields`), ties are handled by the crude but
 # > simple device of adding half of a 'win' to the tally for each player involved; in each of the examples where this
@@ -181,29 +197,10 @@ for (i in 1:argv$queries) {
   targets <- row.names(coefficients)
   media1 <- targets[media1N]
   media2 <- targets[media2N]
-  ## print(media1)
-  ## media1_en <- with(ranking, Media[match(media1, "Title_en")])
-  ## media1_en <- filter(ranking, media1)
-  ## media1_en <- with(ranking, ranking$Media[match(media1, "Title_en")])
   media1_en <- trimws(ranking$Title_en[match(media1, ranking$Media)])
   media2_en <- trimws(ranking$Title_en[match(media2, ranking$Media)])
-  ## print(media1_en)
-  ## print(media2_en)
-  ## media2_en <- with(ranking, ranking$Media[match(media2, "Title_en")])
-  ## print(media2_en)
-  ## media1_en <- fromJSON(jikan_api(paste("anime", ranking$ID[match(media1, ranking[ranking$Media, "Media"])], sep = "/")))
-  ## media2_en <- fromJSON(jikan_api(paste("anime", ranking$ID[match(media2, ranking[ranking$Media, "Media"])], sep = "/")))
-  ## media1_en <- if (is.null(media1_en)) {
-  ##   media1
-  ## } else {
-  ##   noquote(media1_en)
-  ## }
-  ## media2_en <- if (is.null(media2_en)) {
-  ##   media2
-  ## } else {
-  ##   noquote(media2_en)
-  ## }
-
+  id1 <- ranking$ID[match(media1, ranking$Media)]
+  id2 <- ranking$ID[match(media2, ranking$Media)]
 
   no_en <- function(title, title_en) {
     return(tolower(noquote(as.character(title))) == tolower(title_en))
@@ -244,13 +241,13 @@ for (i in 1:argv$queries) {
 
   switch(rating,
     "1" = {
-      comparisons <- rbind(comparisons, data.frame("Media.1" = media1, "Media.2" = media2, "win1" = 1, "win2" = 0))
+      comparisons <- rbind(comparisons, data.frame("timestamp"=Sys.time(), "Media.1" = media1, "ID.1"=id1, "Media.2" = media2, "ID.2"=id2, "win1" = 1, "win2" = 0))
     },
     "2" = {
-      comparisons <- rbind(comparisons, data.frame("Media.1" = media1, "Media.2" = media2, "win1" = 0, "win2" = 1))
+      comparisons <- rbind(comparisons, data.frame("timestamp"=Sys.time(), "Media.1" = media1, "ID.1"=id1, "Media.2" = media2, "ID.2"=id2, "win1" = 0, "win2" = 1))
     },
     "3" = {
-      comparisons <- rbind(comparisons, data.frame("Media.1" = media1, "Media.2" = media2, "win1" = 0.5, "win2" = 0.5))
+      comparisons <- rbind(comparisons, data.frame("timestamp"=Sys.time(), "Media.1" = media1, "ID.1"=id1, "Media.2" = media2, "ID.2"=id2, "win1" = 0.5, "win2" = 0.5))
     },
     "p" = {
       estimates <- data.frame(Media = row.names(coefficients), Estimate = coefficients[, 1], SE = coefficients[, 2])
@@ -278,6 +275,8 @@ if (argv$verbose) {
   print(summary(updatedRankings))
   print(sort(coefficients[, 1]))
 }
+print("")
+print(comparisons)
 ranking2 <- as.data.frame(BTabilities(updatedRankings))
 ## print(rownames(ranking2))
 ranking2$Media <- rownames(ranking2)
@@ -287,11 +286,11 @@ ranking2$Title_en <- rownames(ranking2)
 ## ranking2$ID <- with(ranking, ID[match(ranking2$Media, "Media")])
 ## print(with(ranking, ID[match(ranking2$Media, "Media")]))
 ranking2$ID <- with(ranking, ID[match(ranking2$Media, Media)])
-ranking2$State <- with(ranking, ID[match(ranking2$State, Media)])
-ranking2$Title_en <- with(ranking, ID[match(ranking2$Title_en, Media)])
+ranking2$State <- with(ranking, State[match(ranking2$State, Media)])
+ranking2$Title_en <- with(ranking, Title_en[match(ranking2$Title_en, Media)])
 ## ranking$ID[match(media1, ranking[ranking$Media, "Media"])],
 rownames(ranking2) <- NULL
-print(ranking2, digits=22)
+## print(ranking2, digits=22)
 if (!(argv$`no_scale`)) {
 
   # if the user specified a bunch of buckets using `--quantiles`, parse it and use it,
@@ -301,36 +300,36 @@ if (!(argv$`no_scale`)) {
   } else {
     seq(0, 1, length.out = (argv$levels + 1))
   }
-
   ranking2$Quantile <- with(ranking2, {
-    brk <- quantile(ability, probs = quantiles)
-    bk <- sapply(brk, function(x) {x + sign(runif(n=1,min=0,max=5 * .Machine$double.eps))})
-    print("brk")
-    print(brk)
-    print(brk, digits=22)
-    print("bk")
-    print(bk)
-    print(bk, digits=22)
-    lbl <- 1:(case_when(
-      TRUE ~ as.integer(length(quantiles)-1)
-      ## TRUE ~ as.integer(length(quantiles) - (length(quantiles) - length(brk) + 1)),
-      ## length(quantiles) == length(brk) ~ as.integer(length(brk) - 1),
-      ## length(quantiles) + 1 == length(brk) ~ as.integer(length(quantiles)),
-      ## length(quantiles) - 1 == length(brk) ~ as.integer(length(quantiles) - 1),
-      ## length(quantiles) > length(brk) ~ as.integer(length(brk) - 1)
-      ))
-    print("lbl")
-    print(length(lbl))
-    cut(ability,
-        breaks = bk,
-        labels = lbl,
-        include.lowest = TRUE
-        )
+    brk <- quantile(ability, probs = quantiles, type=8)
+    # clean them up so there are no "NA" values--simply expand the ends to just outside the score range
+    brk <- append(brk[brk < max(brk)], max(ability) + .Machine$double.eps)
+    brk <- append(brk[brk > min(brk)], min(ability) - .Machine$double.eps)
+    if (length(unique(brk)) < length(brk)) {cat(paste0(tiesWarning)); as.integer(length(unique(brk)) - 1) }
+    ## print("bins")
+    ## print(length(lbl))
+    ## print(sort(brk))
+    ## print("unique bins")
+    ## print(sort(unique(brk)))
+    ## print(.bincode(ability, breaks=sort(brk), include.lowest=TRUE))
+    .bincode(ability, breaks=sort(brk), include.lowest=TRUE)
+    ## cut(ability
+    ## , breaks = unique(brk)
+    ## , labels = lbl
+    ## , include.lowest = TRUE
+    ## ,
+    ## )
   })
 
+out_path <- paste(argv$save_path)
+models_path <- paste(out_path, "models", sep="/")
+
+print(ranking2)
   df <- subset(ranking2[order(ranking2$Quantile, decreasing = TRUE), ], select = c("Media", "Quantile", "ID", "State", "Title_en"))
   if (!is.na(argv$output)) {
-    write.csv(df, file = argv$output, row.names = FALSE)
+    write.csv(df, file = paste(out_path, argv$output, sep="/"), row.names = FALSE)
+    write_feather(df, paste(models_path, "df.feather", sep="/"))
+    write_feather(ranking2, paste(models_path, "ranking2.feather", sep="/"))
     print(df)
   } else {
     print(df)

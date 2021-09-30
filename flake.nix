@@ -17,6 +17,7 @@
           rlang
           styler
           httr
+          feather
           BradleyTerry2
           argparser
           tidyverse
