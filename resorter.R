@@ -50,6 +50,13 @@ p <- add_argument(p, "--header", flag = TRUE, "Input has a header; skip first li
 p <- add_argument(p, "--colorize", flag = TRUE, "colorize output")
 argv <- parse_args(p)
 
+get_cli_response <- function(n=1) {
+  keywords <- scan("stdin", what=character(), nlines=n, quiet=TRUE)
+  if (nchar(keywords) != 1 || length(keywords) != 1) {
+    cat(red(paste("invalid input. try again\n")))
+    get_cli_response()
+  } else paste(keywords, collapse=",")
+}
 jikan_api <- function(path) {
   url <- modify_url("https://api.jikan.moe", path = paste("v3", path, sep = "/"))
 
@@ -63,7 +70,6 @@ jikan_api <- function(path) {
 get_en_title <- function(ID) {
   return(jikan_api(paste("anime", ID, sep="/")))
 }
-## print(get_en_title(40679))
 
 # read in the data from either the specified file or stdin:
 if (!is.na(argv$input)) {
@@ -89,7 +95,7 @@ if (ncol(ranking) == 1) {
 }
 
 ## ranking$Title_en <- 0
-colnames(ranking) <- c("Media", "Rating", "ID", "Title_en")
+colnames(ranking) <- c("Media", "Rating", "ID", "State", "Title_en")
 
 ## ranking$Title_en <- with(ranking, fromJSON(jikan_api(paste("anime", ID[match(Media, ranking[ranking$Media, "Media"])], sep = "/"))))
 
@@ -99,7 +105,6 @@ colnames(ranking) <- c("Media", "Rating", "ID", "Title_en")
 ## do.call(rbind, lapply(ranking$ID, get_en_title))
 ## print(newranking)
 ## print(ranking$Title_en)
-
 
 # A set of ratings like 'foo,1\nbar,2' is not comparisons, though. We *could* throw out everything except the 'Media' column
 # but we would like to accelerate the interactive querying process by exploiting the valuable data the user has given us.
@@ -184,7 +189,6 @@ for (i in 1:argv$queries) {
   media2_en <- trimws(ranking$Title_en[match(media2, ranking$Media)])
   ## print(media1_en)
   ## print(media2_en)
-  ## print("tk")
   ## media2_en <- with(ranking, ranking$Media[match(media2, "Title_en")])
   ## print(media2_en)
   ## media1_en <- fromJSON(jikan_api(paste("anime", ranking$ID[match(media1, ranking[ranking$Media, "Media"])], sep = "/")))
