@@ -11,11 +11,11 @@
     flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
+        p2n = pkgs.poetry2nix;
         python = "python39";
-        my-r-packages = with pkgs.rPackages; [
+        r-packages = with pkgs.rPackages; [
           rlang
           styler
-          # R
           httr
           BradleyTerry2
           argparser
@@ -27,48 +27,48 @@
           crayon
         ];
 
-        R-with-my-packages =
-          pkgs.rWrapper.override { packages = my-r-packages; };
+        R-with-packages = pkgs.rWrapper.override { packages = r-packages; };
+        customOverrides = self: super: { };
+        packageName = "Resorter";
 
-        customOverrides = self: super:
-          {
-            # Overrides go here
-          };
-
-        app = pkgs.poetry2nix.mkPoetryApplication {
+        app = p2n.mkPoetryApplication {
           projectDir = ./.;
+          python = pkgs.python39;
           overrides =
-            [ pkgs.poetry2nix.defaultPoetryOverrides customOverrides ];
+            [ p2n.defaultPoetryOverrides customOverrides ];
+        };
+        pythonEnv = p2n.mkPoetryEnv {
+          projectDir = ./.;
+          python = pkgs.python39;
+          overrides =
+            [ p2n.defaultPoetryOverrides customOverrides ];
+        };
+      in {
+        packages.containerImage = pkgs.dockerTools.buildLayeredImage {
+          name = "resorter";
+          contents = [ pkgs.python39 ];
+          config = {
+            Cmd = [ "${pkgs.python3}/bin/python" "-c" "print('hello world')" ];
+          };
         };
 
-        packageName = "Resorter";
-      in {
         packages.${packageName} = app;
         defaultPackage = self.packages.${system}.${packageName};
-        devShell = pkgs.mkShell {
-          buildInputs = with pkgs; [
+        devShell = let
+          pkgs = import nixpkgs {
+            inherit system;
+            overlays = [ devshell.overlay ];
+          };
+        in pkgs.devshell.mkShell {
+          imports = [ (pkgs.devshell.importTOML ./devshell.toml) ];
+          # buildInputs = with pkgs; [ poetry ];
+          devshell.packages = with pkgs; [
+            pythonEnv
             poetry
-            # (pkgs.${python}.withPackages
-            #   (ps: with ps; [ pip black jello pandas httpx ]))
-            # python
-            R
-            my-r-packages
+            # python39.pkgs.black
+            # (pkgs.${python}.withPackages (p: with p; [ pip black ]))
+            R-with-packages
           ];
-          inputsFrom = builtins.attrValues self.packages.${system};
         };
-
-        # devShell = pkgs.mkShell {
-        #   buildInputs = [
-        #     # dev packages
-        #     (pkgs.${python}.withPackages
-        #       (ps: with ps; [ pip black pyflakes isort ])) # <--- change here
-        #     pkgs.nodePackages.pyright
-        #     pkgs.glpk
-
-        #     # app packages
-        #     # pythonBuild
-        #   ];
-        # };
-
       });
 }

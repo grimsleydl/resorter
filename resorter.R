@@ -208,17 +208,16 @@ for (i in 1:argv$queries) {
   no_en <- function(title, title_en) {
     return(tolower(noquote(as.character(title))) == tolower(title_en))
   }
-
   titles_no_en <- list(
     title1=no_en(media1, media1_en),
     title2=no_en(media2, media2_en)
   )
 
   if (argv$colorize) {
-  printMedia1 <- if (titles_no_en[["title1"]]) blue(as.character(media1)) else yellow(as.character(media1))
-  printMedia2 <- if (titles_no_en[["title2"]]) blue(as.character(media2)) else yellow(as.character(media2))
-  printMedia1_en <- blue(as.character(media1_en))
-  printMedia2_en <- blue(as.character(media2_en))
+  printMedia1 <- if (titles_no_en[["title1"]]) red(as.character(media1)) else yellow(as.character(media1))
+  printMedia2 <- if (titles_no_en[["title2"]]) red(as.character(media2)) else yellow(as.character(media2))
+  printMedia1_en <- red(as.character(media1_en))
+  printMedia2_en <- red(as.character(media2_en))
   }
   else {
   printMedia1 <- as.character(media1)
@@ -241,7 +240,7 @@ for (i in 1:argv$queries) {
     cat(paste0(printMedia1, " (", printMedia1_en, ")", " vs ", printMedia2, " (", printMedia2_en, ")", ": "))
   }
 
-  rating <- scan("stdin", character(), n = 1, quiet = TRUE)
+  rating <- get_cli_response() #scan("stdin", character(), n = 1, quiet = TRUE)
 
   switch(rating,
     "1" = {
@@ -279,17 +278,20 @@ if (argv$verbose) {
   print(summary(updatedRankings))
   print(sort(coefficients[, 1]))
 }
-
 ranking2 <- as.data.frame(BTabilities(updatedRankings))
-
 ## print(rownames(ranking2))
 ranking2$Media <- rownames(ranking2)
+ranking2$ID <- rownames(ranking2)
+ranking2$State <- rownames(ranking2)
+ranking2$Title_en <- rownames(ranking2)
 ## ranking2$ID <- with(ranking, ID[match(ranking2$Media, "Media")])
 ## print(with(ranking, ID[match(ranking2$Media, "Media")]))
 ranking2$ID <- with(ranking, ID[match(ranking2$Media, Media)])
+ranking2$State <- with(ranking, ID[match(ranking2$State, Media)])
+ranking2$Title_en <- with(ranking, ID[match(ranking2$Title_en, Media)])
 ## ranking$ID[match(media1, ranking[ranking$Media, "Media"])],
 rownames(ranking2) <- NULL
-
+print(ranking2, digits=22)
 if (!(argv$`no_scale`)) {
 
   # if the user specified a bunch of buckets using `--quantiles`, parse it and use it,
@@ -299,14 +301,37 @@ if (!(argv$`no_scale`)) {
   } else {
     seq(0, 1, length.out = (argv$levels + 1))
   }
-  ranking2$Quantile <- with(ranking2, cut(ability,
-    breaks = quantile(ability, probs = quantiles),
-    labels = 1:(length(quantiles) - 1),
-    include.lowest = TRUE
-  ))
-  df <- subset(ranking2[order(ranking2$Quantile, decreasing = TRUE), ], select = c("Media", "Quantile", "ID"))
+
+  ranking2$Quantile <- with(ranking2, {
+    brk <- quantile(ability, probs = quantiles)
+    bk <- sapply(brk, function(x) {x + sign(runif(n=1,min=0,max=5 * .Machine$double.eps))})
+    print("brk")
+    print(brk)
+    print(brk, digits=22)
+    print("bk")
+    print(bk)
+    print(bk, digits=22)
+    lbl <- 1:(case_when(
+      TRUE ~ as.integer(length(quantiles)-1)
+      ## TRUE ~ as.integer(length(quantiles) - (length(quantiles) - length(brk) + 1)),
+      ## length(quantiles) == length(brk) ~ as.integer(length(brk) - 1),
+      ## length(quantiles) + 1 == length(brk) ~ as.integer(length(quantiles)),
+      ## length(quantiles) - 1 == length(brk) ~ as.integer(length(quantiles) - 1),
+      ## length(quantiles) > length(brk) ~ as.integer(length(brk) - 1)
+      ))
+    print("lbl")
+    print(length(lbl))
+    cut(ability,
+        breaks = bk,
+        labels = lbl,
+        include.lowest = TRUE
+        )
+  })
+
+  df <- subset(ranking2[order(ranking2$Quantile, decreasing = TRUE), ], select = c("Media", "Quantile", "ID", "State", "Title_en"))
   if (!is.na(argv$output)) {
     write.csv(df, file = argv$output, row.names = FALSE)
+    print(df)
   } else {
     print(df)
   }
