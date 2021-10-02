@@ -39,7 +39,7 @@ p <- add_argument(p, "--input",
   "input file: a CSV file of items to sort: one per line, with up to two columns. (eg both 'Akira\\n' and 'Akira, 10\\n' are valid).", type = "character"
 )
 p <- add_argument(p, "--output", "output file: a file to write the final results to. Default: printing to stdout.")
-p <- add_argument(p, "--save-path", "path to models and output")
+p <- add_argument(p, "--working-directory", "set working directory; path to models and output")
 p <- add_argument(p, "--verbose", "whether to print out intermediate statistics", flag = TRUE)
 p <- add_argument(p, "--queries",
   short = "-n", default = NA,
@@ -53,10 +53,14 @@ p <- add_argument(p, "--header", flag = TRUE, "Input has a header; skip first li
 p <- add_argument(p, "--colorize", flag = TRUE, "colorize output")
 argv <- parse_args(p)
 
-print(paste(argv$save_path, "models", sep="/"))
-print(argv$save_path)
-if(!dir.exists(paste(argv$save_path))) dir.create(paste(argv$save_path))
-if(!dir.exists(paste(argv$save_path, "models", sep="/"))) dir.create(paste(argv$save_path, "models", sep="/"))
+print(paste(argv$working_directory, "models", sep="/"))
+print(argv$working_directory)
+if(!dir.exists(paste(argv$working_directory))) dir.create(paste(argv$working_directory))
+if(!dir.exists(paste(argv$working_directory, "models", sep="/"))) dir.create(paste(argv$working_directory, "models", sep="/"))
+
+
+out_path <- paste(argv$working_directory)
+models_path <- paste(out_path, "models", sep="/")
 
 ## setwd(paste(argv$input, "models", sep="/"))
 get_cli_response <- function(n=1) {
@@ -84,13 +88,15 @@ warn <- yellow $ underline
 note <- cyan
 tiesWarning <- warn("Warning: too many ties; precision reduced\n")
 
+infile <- paste(argv$working_directory, argv$input, sep="/")
+
 # read in the data from either the specified file or stdin:
 if (!is.na(argv$input)) {
   if (argv$header) {
-    ranking <- read.csv(file = argv$input, stringsAsFactors = TRUE, header = TRUE)
+    ranking <- read.csv(file = infile, stringsAsFactors = TRUE, header = TRUE)
   }
   else {
-    ranking <- read.csv(file = argv$input, stringsAsFactors = TRUE, header = FALSE)
+    ranking <- read.csv(file = infile, stringsAsFactors = TRUE, header = FALSE)
   }
 } else {
   ranking <- read.csv(file = file("stdin"), stringsAsFactors = TRUE, header = FALSE)
@@ -170,7 +176,6 @@ for (i in 1:argv$queries) {
     print(i)
     print(coefficients)
   }
-
   # select two media to compare: pick the media with the highest standard error and the media above or below it with the highest standard error:
   # which is a heuristic for the most informative pairwise comparison. BT2 appears to get caught in some sort of a fixed point with greedy selection,
   # so every few rounds pick a random starting point:
@@ -321,8 +326,6 @@ if (!(argv$`no_scale`)) {
     ## )
   })
 
-out_path <- paste(argv$save_path)
-models_path <- paste(out_path, "models", sep="/")
 
 print(ranking2)
   df <- subset(ranking2[order(ranking2$Quantile, decreasing = TRUE), ], select = c("Media", "Quantile", "ID", "State", "Title_en"))

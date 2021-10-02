@@ -1,11 +1,14 @@
 #!/usr/bin/env zsh
 set -euo pipefail
 
+SCRIPT_PATH=${0/#[!\/]/"$PWD/${0:0:1}"}
+SCRIPT_DIR=${SCRIPT_PATH%/*}
+
+SAVEPATH="tests"
+IMPORTS="import"
 # INFILE=mal-completed-presorted.csv
 INFILE=test-presorted.csv
-# INFILE=test-20210927T1507.csv
 OUTFILE=test-$(date -u +"%Y%m%dT%H%M").csv
-SAVEPATH="test"
 
 ask() {
     local prompt default reply
@@ -35,13 +38,15 @@ ask() {
         esac
     done
 }
+awk -F ',' -v FPAT="([^,]+)|(\"[^\"]+\")" -v OFS=', ' '{gsub(/"/,"",$2); print $1,$2,$3,$4,$5}' "${SAVEPATH}/${IMPORTS}/${INFILE}" > "${SAVEPATH}/${INFILE}"
 
-Rscript resorter.R -i  =(awk -F ',' -v FPAT="([^,]+)|(\"[^\"]+\")" -v OFS=', ' '{gsub(/"/,"",$2); print $1,$2,$3,$4,$5}' "$INFILE") --quantiles '0 0.05 0.1 0.2 0.3 0.4 0.5 0.97 0.98 0.99 0.995' -o "$OUTFILE" --progress --header --colorize --save-path "$SAVEPATH"
+Rscript "${SCRIPT_DIR}/resorter.R" -i "${INFILE}" --quantiles '0 0.05 0.1 0.2 0.3 0.4 0.5 0.97 0.98 0.99 0.995' -o "${OUTFILE}" --progress --header --colorize --working-directory "$SAVEPATH"
 
 # Rscript resorter.R -i "$INFILE" --quantiles '0 0.05 0.1 0.2 0.3 0.4 0.5 0.97 0.98 0.99 0.995' -o "$OUTFILE" --progress
 
 # Rscript resorter.R -i =(awk -F ',' -v FPAT="([^,]+)|(\"[^\"]+\")" -v OFS=', ' '{gsub(/"/,"",$2); print $1,$2}' test-20210926T0511.csv) --quantiles '0 0.05 0.1 0.2 0.3 0.4 0.5 0.97 0.98 0.99 0.995' -o "$OUTFILE" --progress
 
-echo
+pushd "$SAVEPATH"
 ask "Keep result?" || rm "$OUTFILE"
 # rm "$OUTFILE"
+trap popd EXIT
