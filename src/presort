@@ -27,3 +27,11 @@ with httpx.Client(base_url="https://api.jikan.moe/v3/anime", timeout=None) as cl
     if "Title_en" not in df.columns:
         df["Title_en"] = [get_english_title(i) for i in df["ID"]]
         df.to_csv(outfile, index=False, quoting=csv.QUOTE_ALL)
+
+
+
+comparisons = pd.read_csv("../tests/import/mal-completed-comparisons", parse_dates=[1])
+comparisons['timestamp'] = pd.to_datetime(comparisons['timestamp'])
+print(comparisons.info())
+comparisons.to_feather("./tests/import/mal-completed-comparisons.feather")
+# df = pd.read_feather("./tests/import/mal-completed-comparisons.feather")
