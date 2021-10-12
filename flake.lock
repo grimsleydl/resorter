@@ -4,45 +4,45 @@
       "locked": {
         "lastModified": 1632436039,
         "narHash": "sha256-OtITeVWcKXn1SpVEnImpTGH91FycCskGBPqmlxiykv4=",
-        "owner": "numtide",
-        "repo": "devshell",
+        "ref": "master",
         "rev": "7a7a7aa0adebe5488e5abaec688fd9ae0f8ea9c6",
-        "type": "github"
+        "revCount": 151,
+        "type": "git",
+        "url": "git://github.com/numtide/devshell.git"
       },
       "original": {
-        "owner": "numtide",
-        "repo": "devshell",
-        "type": "github"
+        "type": "git",
+        "url": "git://github.com/numtide/devshell.git"
       }
     },
     "flake-utils": {
       "locked": {
         "lastModified": 1631561581,
         "narHash": "sha256-3VQMV5zvxaVLvqqUrNz3iJelLw30mIVSfZmAaauM3dA=",
-        "owner": "numtide",
-        "repo": "flake-utils",
+        "ref": "master",
         "rev": "7e5bf3925f6fbdfaf50a2a7ca0be2879c4261d19",
-        "type": "github"
+        "revCount": 40,
+        "type": "git",
+        "url": "git://github.com/numtide/flake-utils.git"
       },
       "original": {
-        "owner": "numtide",
-        "repo": "flake-utils",
-        "type": "github"
+        "type": "git",
+        "url": "git://github.com/numtide/flake-utils.git"
       }
     },
     "nixpkgs": {
       "locked": {
-        "lastModified": 1632796373,
-        "narHash": "sha256-v5yJz3ycNjasM8j22rfAhQqyJpllmwz2q2y/WOnE6ZE=",
-        "owner": "NixOS",
-        "repo": "nixpkgs",
-        "rev": "dc72e18d5f34b3605ae9d7996984eaab239ef460",
-        "type": "github"
+        "lastModified": 1633621759,
+        "narHash": "sha256-Mw29zuYjOozICTWsc9RvjuR7hW5D0H83onQh/WoVrMs=",
+        "ref": "master",
+        "rev": "6755a884b24038a73dd4c8022dbb05375feef0a7",
+        "revCount": 321827,
+        "type": "git",
+        "url": "git://github.com/NixOS/nixpkgs.git"
       },
       "original": {
-        "owner": "NixOS",
-        "repo": "nixpkgs",
-        "type": "github"
+        "type": "git",
+        "url": "git://github.com/NixOS/nixpkgs.git"
       }
     },
     "root": {

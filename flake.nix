@@ -2,21 +2,27 @@
   description = "resorter";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs";
-    flake-utils.url = "github:numtide/flake-utils";
-    devshell.url = "github:numtide/devshell";
+    nixpkgs.url = "git://github.com/NixOS/nixpkgs.git";
+    flake-utils.url = "git://github.com/numtide/flake-utils.git";
+    devshell.url = "git://github.com/numtide/devshell.git";
   };
 
   outputs = { self, nixpkgs, devshell, flake-utils }:
     flake-utils.lib.eachDefaultSystem (system:
       let
-        pkgs = nixpkgs.legacyPackages.${system};
+        overlays = [ ];
+        pkgs = import nixpkgs {
+          inherit system overlays;
+          config.allowBroken = true;
+        };
         p2n = pkgs.poetry2nix;
         python = "python39";
         r-packages = with pkgs.rPackages; [
           rlang
-          styler
+          # styler
           httr
+          rio
+          arrow
           feather
           BradleyTerry2
           argparser
@@ -35,19 +41,18 @@
         app = p2n.mkPoetryApplication {
           projectDir = ./.;
           python = pkgs.python39;
-          overrides =
-            [ p2n.defaultPoetryOverrides customOverrides ];
+          overrides = [ p2n.defaultPoetryOverrides customOverrides ];
         };
         pythonEnv = p2n.mkPoetryEnv {
           projectDir = ./.;
           python = pkgs.python39;
-          overrides =
-            [ p2n.defaultPoetryOverrides customOverrides ];
+          overrides = [ p2n.defaultPoetryOverrides customOverrides ];
         };
-      in {
+      in
+      {
         packages.containerImage = pkgs.dockerTools.buildLayeredImage {
           name = "resorter";
-          contents = [ pkgs.python39 ];
+          contents = [ pkgs.python39 app ];
           config = {
             Cmd = [ "${pkgs.python3}/bin/python" "-c" "print('hello world')" ];
           };
@@ -55,21 +60,23 @@
 
         packages.${packageName} = app;
         defaultPackage = self.packages.${system}.${packageName};
-        devShell = let
-          pkgs = import nixpkgs {
-            inherit system;
-            overlays = [ devshell.overlay ];
+        devShell =
+          let
+            pkgs = import nixpkgs {
+              inherit system;
+              overlays = [ devshell.overlay ];
+            };
+          in
+          pkgs.devshell.mkShell {
+            imports = [ (pkgs.devshell.importTOML ./devshell.toml) ];
+            # buildInputs = with pkgs; [ poetry ];
+            devshell.packages = with pkgs; [
+              pythonEnv
+              poetry
+              # python39.pkgs.black
+              # (pkgs.${python}.withPackages (p: with p; [ pip black ]))
+              R-with-packages
+            ];
           };
-        in pkgs.devshell.mkShell {
-          imports = [ (pkgs.devshell.importTOML ./devshell.toml) ];
-          # buildInputs = with pkgs; [ poetry ];
-          devshell.packages = with pkgs; [
-            pythonEnv
-            poetry
-            # python39.pkgs.black
-            # (pkgs.${python}.withPackages (p: with p; [ pip black ]))
-            R-with-packages
-          ];
-        };
       });
 }
