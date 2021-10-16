@@ -53,6 +53,7 @@ p <- add_argument(p, "--progress", flag = TRUE, "Print out mean standard error o
 p <- add_argument(p, "--header", flag = TRUE, "Input has a header; skip first line before looking for ratings")
 p <- add_argument(p, "--colorize", flag = TRUE, "colorize output")
 p <- add_argument(p, "--comparisons", "comparisons import")
+p <- add_argument(p, "--quant-only", flag = TRUE, "only quantize based on provided comparisons")
 
 argv <- parse_args(p)
 
@@ -151,119 +152,122 @@ if (argv$verbose) {
   print(sort(BTabilities(priorRankings)[, 1]))
 }
 set.seed(2015 - 09 - 10)
-cat("Comparison commands: 1=yes, 2=second is better, 3=tied, p=print estimates, s=skip, q=quit\n")
-for (i in 1:( argv$queries - nrow(comparisons) )) {
-  cat(note(paste0("Query ", if (nrow(comparisons) > i) {nrow(comparisons)} else {i}, " ")))
-  ## with the current data, calculate and extract the new estimates:
-  suppressWarnings(updatedRankings <- BTm(cbind(win1, win2), Media.1, Media.2, br = TRUE, data = comparisons))
-  coefficients <- BTabilities(updatedRankings)
-  ## sort by latent variable 'ability':
-  coefficients <- coefficients[order(coefficients[, 1]), ]
 
-  if (argv$verbose) {
-    print(i)
-    print(coefficients)
-  }
-  ## select two media to compare: pick the media with the highest standard error and the media above or below it with the highest standard error:
-  ## which is a heuristic for the most informative pairwise comparison. BT2 appears to get caught in some sort of a fixed point with greedy selection,
-  ## so every few rounds pick a random starting point:
-  media1N <- if (i %% 3 == 0) {
-    which.max(coefficients[, 2])
-  } else {
-    sample.int(nrow(coefficients), 1)
-  }
-  media2N <- if (media1N == nrow(coefficients)) {
-    nrow(coefficients) - 1
-  } else { # if at the top & 1st place, must compare to 2nd place
-    if (media1N == 1) {
-      2
-    } else { # if at the bottom/last place, must compare to 2nd-to-last
-      ## if neither at bottom nor top, then there are two choices, above & below, and we want the one with highest SE; if equal, arbitrarily choose the better:
-      if ((coefficients[, 2][media1N + 1]) > (coefficients[, 2][media1N - 1])) {
-        media1N + 1
-      } else {
-        media1N - 1
-      }
+if (is.na(argv$quant_only)) {
+  cat("Comparison commands: 1=yes, 2=second is better, 3=tied, p=print estimates, s=skip, q=quit\n")
+  for (i in 1:( argv$queries - nrow(comparisons) )) {
+    cat(note(paste0("Query ", if (nrow(comparisons) > i) {nrow(comparisons)} else {i}, " ")))
+    ## with the current data, calculate and extract the new estimates:
+    suppressWarnings(updatedRankings <- BTm(cbind(win1, win2), Media.1, Media.2, br = TRUE, data = comparisons))
+    coefficients <- BTabilities(updatedRankings)
+    ## sort by latent variable 'ability':
+    coefficients <- coefficients[order(coefficients[, 1]), ]
+
+    if (argv$verbose) {
+      print(i)
+      print(coefficients)
     }
-  }
+    ## select two media to compare: pick the media with the highest standard error and the media above or below it with the highest standard error:
+    ## which is a heuristic for the most informative pairwise comparison. BT2 appears to get caught in some sort of a fixed point with greedy selection,
+    ## so every few rounds pick a random starting point:
+    media1N <- if (i %% 3 == 0) {
+                 which.max(coefficients[, 2])
+               } else {
+                 sample.int(nrow(coefficients), 1)
+               }
+    media2N <- if (media1N == nrow(coefficients)) {
+                 nrow(coefficients) - 1
+               } else { # if at the top & 1st place, must compare to 2nd place
+                 if (media1N == 1) {
+                   2
+                 } else { # if at the bottom/last place, must compare to 2nd-to-last
+                   ## if neither at bottom nor top, then there are two choices, above & below, and we want the one with highest SE; if equal, arbitrarily choose the better:
+                   if ((coefficients[, 2][media1N + 1]) > (coefficients[, 2][media1N - 1])) {
+                     media1N + 1
+                   } else {
+                     media1N - 1
+                   }
+                 }
+               }
 
-  targets <- row.names(coefficients)
-  media1 <- targets[media1N]
-  media2 <- targets[media2N]
-  media1_en <- trimws(ranking$Title_en[match(media1, ranking$Media)])
-  media2_en <- trimws(ranking$Title_en[match(media2, ranking$Media)])
-  id1 <- ranking$ID[match(media1, ranking$Media)]
-  id2 <- ranking$ID[match(media2, ranking$Media)]
+    targets <- row.names(coefficients)
+    media1 <- targets[media1N]
+    media2 <- targets[media2N]
+    media1_en <- trimws(ranking$Title_en[match(media1, ranking$Media)])
+    media2_en <- trimws(ranking$Title_en[match(media2, ranking$Media)])
+    id1 <- ranking$ID[match(media1, ranking$Media)]
+    id2 <- ranking$ID[match(media2, ranking$Media)]
 
-  no_en <- function(title, title_en) {
-    return(tolower(noquote(as.character(title))) == tolower(title_en))
-  }
-  titles_no_en <- list(
-    title1=no_en(media1, media1_en),
-    title2=no_en(media2, media2_en)
-  )
+    no_en <- function(title, title_en) {
+      return(tolower(noquote(as.character(title))) == tolower(title_en))
+    }
+    titles_no_en <- list(
+      title1=no_en(media1, media1_en),
+      title2=no_en(media2, media2_en)
+    )
 
-  is_repeat <- nrow(comparisons %>% filter({ Media.1 == media1 | Media.1 == media2 } & { Media.2 == media1 | Media.2 == media2 }))
-  if (!is_repeat) {
-    if (argv$colorize) {
-      printMedia1 <- if (titles_no_en[["title1"]]) red(as.character(media1)) else yellow(as.character(media1))
-      printMedia2 <- if (titles_no_en[["title2"]]) red(as.character(media2)) else yellow(as.character(media2))
-      printMedia1_en <- red(as.character(media1_en))
-      printMedia2_en <- red(as.character(media2_en))
+    is_repeat <- nrow(comparisons %>% filter({ Media.1 == media1 | Media.1 == media2 } & { Media.2 == media1 | Media.2 == media2 }))
+    if (!is_repeat) {
+      if (argv$colorize) {
+        printMedia1 <- if (titles_no_en[["title1"]]) red(as.character(media1)) else yellow(as.character(media1))
+        printMedia2 <- if (titles_no_en[["title2"]]) red(as.character(media2)) else yellow(as.character(media2))
+        printMedia1_en <- red(as.character(media1_en))
+        printMedia2_en <- red(as.character(media2_en))
+      }
+      else {
+        printMedia1 <- as.character(media1)
+        printMedia2 <- as.character(media2)
+      }
+
+      if (argv$`progress`) {
+        cat(paste0("Mean stderr: ", round(mean(coefficients[, 2]))), " | ")
+      }
+      if (titles_no_en[["title1"]] && titles_no_en[["title2"]]) {
+        cat(paste0(printMedia1, " vs ", printMedia2, ": "))
+      }
+      if (titles_no_en[["title1"]] && (! titles_no_en[["title2"]])) {
+        cat(paste0(printMedia1, " vs ", printMedia2, " (", printMedia2_en, ")", ": "))
+      }
+      if ((! titles_no_en[["title1"]]) && titles_no_en[["title2"]]) {
+        cat(paste0(printMedia1, " (", printMedia1_en, ")", " vs ", printMedia2, ": "))
+      }
+      if ((! titles_no_en[["title1"]]) && (! titles_no_en[["title2"]])) {
+        cat(paste0(printMedia1, " (", printMedia1_en, ")", " vs ", printMedia2, " (", printMedia2_en, ")", ": "))
+      }
+
+      rating <- get_cli_response() # scan("stdin", character(), n = 1, quiet = TRUE)
+
+      switch(rating,
+             "1" = {
+               comparisons <- rbind(comparisons, data.frame("timestamp"=Sys.time(), "Media.1" = media1, "ID.1"=id1, "Media.2" = media2, "ID.2"=id2, "win1" = 1, "win2" = 0))
+             },
+             "2" = {
+               comparisons <- rbind(comparisons, data.frame("timestamp"=Sys.time(), "Media.1" = media1, "ID.1"=id1, "Media.2" = media2, "ID.2"=id2, "win1" = 0, "win2" = 1))
+             },
+             "3" = {
+               comparisons <- rbind(comparisons, data.frame("timestamp"=Sys.time(), "Media.1" = media1, "ID.1"=id1, "Media.2" = media2, "ID.2"=id2, "win1" = 0.5, "win2" = 0.5))
+             },
+             "p" = {
+               estimates <- data.frame(Media = row.names(coefficients), Estimate = coefficients[, 1], SE = coefficients[, 2])
+               print(comparisons)
+               print(warnings())
+               print(summary(updatedRankings))
+               print(estimates[order(estimates$Estimate), ], row.names = FALSE)
+             },
+             "s" = {},
+             "q" = {
+               break
+             }
+             )
     }
     else {
-      printMedia1 <- as.character(media1)
-      printMedia2 <- as.character(media2)
+      estimates <- data.frame(Media = row.names(coefficients), Estimate = coefficients[, 1], SE = coefficients[, 2])
+      ## print(comparisons)
+      ## print(warnings())
+      cat(paste0("repeated ", printMedia1, " vs ", printMedia2, "\n"))}
+    if (!is.na(argv$output)) {
+      write_feather(comparisons, paste(models_path, "comparisons.feather", sep="/"))
     }
-
-    if (argv$`progress`) {
-      cat(paste0("Mean stderr: ", round(mean(coefficients[, 2]))), " | ")
-    }
-    if (titles_no_en[["title1"]] && titles_no_en[["title2"]]) {
-      cat(paste0(printMedia1, " vs ", printMedia2, ": "))
-    }
-    if (titles_no_en[["title1"]] && (! titles_no_en[["title2"]])) {
-      cat(paste0(printMedia1, " vs ", printMedia2, " (", printMedia2_en, ")", ": "))
-    }
-    if ((! titles_no_en[["title1"]]) && titles_no_en[["title2"]]) {
-      cat(paste0(printMedia1, " (", printMedia1_en, ")", " vs ", printMedia2, ": "))
-    }
-    if ((! titles_no_en[["title1"]]) && (! titles_no_en[["title2"]])) {
-      cat(paste0(printMedia1, " (", printMedia1_en, ")", " vs ", printMedia2, " (", printMedia2_en, ")", ": "))
-    }
-
-    rating <- get_cli_response() # scan("stdin", character(), n = 1, quiet = TRUE)
-
-    switch(rating,
-           "1" = {
-             comparisons <- rbind(comparisons, data.frame("timestamp"=Sys.time(), "Media.1" = media1, "ID.1"=id1, "Media.2" = media2, "ID.2"=id2, "win1" = 1, "win2" = 0))
-           },
-           "2" = {
-             comparisons <- rbind(comparisons, data.frame("timestamp"=Sys.time(), "Media.1" = media1, "ID.1"=id1, "Media.2" = media2, "ID.2"=id2, "win1" = 0, "win2" = 1))
-           },
-           "3" = {
-             comparisons <- rbind(comparisons, data.frame("timestamp"=Sys.time(), "Media.1" = media1, "ID.1"=id1, "Media.2" = media2, "ID.2"=id2, "win1" = 0.5, "win2" = 0.5))
-           },
-           "p" = {
-             estimates <- data.frame(Media = row.names(coefficients), Estimate = coefficients[, 1], SE = coefficients[, 2])
-             print(comparisons)
-             print(warnings())
-             print(summary(updatedRankings))
-             print(estimates[order(estimates$Estimate), ], row.names = FALSE)
-           },
-           "s" = {},
-           "q" = {
-             break
-           }
-           )
-  }
-  else {
-    estimates <- data.frame(Media = row.names(coefficients), Estimate = coefficients[, 1], SE = coefficients[, 2])
-    ## print(comparisons)
-    ## print(warnings())
-    cat(paste0("repeated ", printMedia1, " vs ", printMedia2, "\n"))}
-  if (!is.na(argv$output)) {
-    write_feather(comparisons, paste(models_path, "comparisons.feather", sep="/"))
   }
 }
 ## results of all the questioning:
