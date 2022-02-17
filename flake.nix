@@ -2,7 +2,7 @@
   description = "resorter";
 
   inputs = {
-    nixpkgs.url = "git://github.com/NixOS/nixpkgs.git";
+    nixpkgs.url = "github:NixOS/nixpkgs?rev=c82b46413401efa740a0b994f52e9903a4f6dcd5";
     flake-utils.url = "git://github.com/numtide/flake-utils.git";
     devshell.url = "git://github.com/numtide/devshell.git";
   };
@@ -39,12 +39,11 @@
         packageName = "Resorter";
 
         app = p2n.mkPoetryApplication {
-          projectDir = ./.;
+          projectDir = ./src/presorter;
           python = pkgs.python39;
-          overrides = [ p2n.defaultPoetryOverrides customOverrides ];
         };
         pythonEnv = p2n.mkPoetryEnv {
-          projectDir = ./.;
+          projectDir = ./src/presorter;
           python = pkgs.python39;
           overrides = [ p2n.defaultPoetryOverrides customOverrides ];
         };
@@ -52,13 +51,15 @@
       {
         packages.containerImage = pkgs.dockerTools.buildLayeredImage {
           name = "resorter";
-          contents = [ pkgs.python39 app ];
+          contents = [ pkgs.python39 app pkgs.bash pkgs.coreutils pkgs.findutils pkgs.gnugrep ];
           config = {
-            Cmd = [ "${pkgs.python3}/bin/python" "-c" "print('hello world')" ];
+            Cmd = [ "${app}/bin/presort" ];
+            # Cmd = [ "${pkgs.bash}/bin/bash" ];
           };
         };
 
-        packages.${packageName} = app;
+        # packages.${packageName} = app;
+        packages.presorter = app;
         defaultPackage = self.packages.${system}.${packageName};
         devShell =
           let
@@ -69,12 +70,9 @@
           in
           pkgs.devshell.mkShell {
             imports = [ (pkgs.devshell.importTOML ./devshell.toml) ];
-            # buildInputs = with pkgs; [ poetry ];
             devshell.packages = with pkgs; [
               pythonEnv
               poetry
-              # python39.pkgs.black
-              # (pkgs.${python}.withPackages (p: with p; [ pip black ]))
               R-with-packages
             ];
           };
