@@ -60,7 +60,7 @@
 
         # packages.${packageName} = app;
         packages.presorter = app;
-        defaultPackage = self.packages.${system}.${packageName};
+        defaultPackage = app;
         devShell =
           let
             pkgs = import nixpkgs {
