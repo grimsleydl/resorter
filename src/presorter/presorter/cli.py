@@ -14,8 +14,8 @@ outfile = f"{filename}-presorted.csv"
 
 def presort():
 
-    # print("Hello from a Nix-built container")
-    # sys.exit("goodbye")
+    print("Hello from a Nix-built container")
+    sys.exit("goodbye")
 
     df = pd.read_csv(infile)
     # df.drop(columns=df.filter("State"), axis=1, inplace=True)
