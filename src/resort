@@ -1,6 +1,7 @@
 #!/usr/bin/env zsh
 set -euo pipefail
 
+# get script directory
 SCRIPT_PATH=${0/#[!\/]/"$PWD/${0:0:1}"}
 SCRIPT_DIR=${SCRIPT_PATH%/*}
 
